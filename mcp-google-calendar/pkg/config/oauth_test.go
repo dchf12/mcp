@@ -97,3 +97,59 @@ func TestAuthFlow(t *testing.T) {
 		t.Fatal("timeout waiting for AuthFlow to finish")
 	}
 }
+
+func TestSaveAndLoadToken(t *testing.T) {
+	homeDir := t.TempDir()
+	t.Setenv("HOME", homeDir)
+
+	token := &oauth2.Token{
+		AccessToken:  "test_access_token",
+		TokenType:    "Bearer",
+		RefreshToken: "test_refresh_token",
+		Expiry:       time.Now().Add(time.Hour),
+	}
+
+	// トークンを保存
+	err := SaveToken(token)
+	require.NoError(t, err)
+
+	// トークンを読み込み
+	loaded, err := LoadToken()
+	require.NoError(t, err)
+	require.NotNil(t, loaded)
+
+	assert.Equal(t, token.AccessToken, loaded.AccessToken)
+	assert.Equal(t, token.RefreshToken, loaded.RefreshToken)
+	assert.Equal(t, token.TokenType, loaded.TokenType)
+	assert.True(t, token.Expiry.Equal(loaded.Expiry))
+}
+
+func TestAuthFlowWithExistingToken(t *testing.T) {
+	homeDir := t.TempDir()
+	t.Setenv("HOME", homeDir)
+
+	// 有効なトークンを事前に保存
+	validToken := &oauth2.Token{
+		AccessToken:  "existing_access_token",
+		TokenType:    "Bearer",
+		RefreshToken: "existing_refresh_token",
+		Expiry:       time.Now().Add(time.Hour),
+	}
+	err := SaveToken(validToken)
+	require.NoError(t, err)
+
+	ctx := context.Background()
+	config := &Config{
+		ClientID:     "test-client-id",
+		ClientSecret: "test-client-secret",
+		RedirectURL:  "http://localhost:8080/callback",
+	}
+
+	// AuthFlowを実行（既存のトークンが返されるはず）
+	token, err := AuthFlow(ctx, config)
+	require.NoError(t, err)
+	require.NotNil(t, token)
+
+	assert.Equal(t, validToken.AccessToken, token.AccessToken)
+	assert.Equal(t, validToken.RefreshToken, token.RefreshToken)
+}

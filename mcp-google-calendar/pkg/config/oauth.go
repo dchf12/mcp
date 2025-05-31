@@ -7,17 +7,39 @@ import (
 	"os/exec"
 	"runtime"
 
+	"github.com/dch/mcp-google-calendar/internal/infrastructure/repository"
 	"golang.org/x/oauth2"
 )
 
 const (
 	// LocalServerPort はOAuthコールバック用のローカルサーバーのデフォルトポート番号です
+	// このポートでローカルサーバーが起動し、OAuth2.0認証後のコールバックを受け付けます
 	LocalServerPort = 8080
 )
 
-// AuthFlow はOAuth認証フローを実行します
+// AuthFlow はOAuth認証フローを実行し、トークンを取得・保存します
+//
+// 以下の順序で認証を実行します：
+// 1. 既存の有効なトークンがあれば、それを返します
+// 2. ブラウザを開いてユーザーに認証を要求します
+// 3. ローカルサーバーで認証コードを受け取ります
+// 4. 認証コードをトークンと交換します
+// 5. トークンを保存して返します
+//
+// 引数:
+//   - ctx: コンテキスト（タイムアウトやキャンセルに使用）
+//   - config: OAuth設定
+//
+// 戻り値:
+//   - *oauth2.Token: 取得したアクセストークン
+//   - error: 認証エラー、ネットワークエラー、またはトークン保存エラー
 func AuthFlow(ctx context.Context, config *Config) (*oauth2.Token, error) {
 	oauthConfig := config.NewOAuthConfig()
+
+	// 既存のトークンを確認
+	if token, err := LoadToken(); err == nil && token.Valid() {
+		return token, nil
+	}
 
 	authURL := GetAuthURL(oauthConfig)
 
@@ -37,12 +59,59 @@ func AuthFlow(ctx context.Context, config *Config) (*oauth2.Token, error) {
 		return nil, fmt.Errorf("トークンの取得に失敗しました: %w", err)
 	}
 
+	// トークンを保存
+	if err := SaveToken(token); err != nil {
+		return nil, fmt.Errorf("トークンの保存に失敗しました: %w", err)
+	}
+
 	return token, nil
 }
 
 // GetAuthURL は認証用URLを生成します
+//
+// オフラインアクセスモードでURLを生成し、リフレッシュトークンの取得を可能にします
+//
+// 引数:
+//   - config: OAuth設定
+//
+// 戻り値:
+//   - string: 認証用URL（ユーザーがブラウザでアクセスするURL）
 func GetAuthURL(config *oauth2.Config) string {
 	return config.AuthCodeURL("state", oauth2.AccessTypeOffline)
+}
+
+// SaveToken はOAuth2トークンをファイルに保存します
+//
+// ~/.config/gcal_mcp/token.json にトークンを保存します
+// ファイルは600パーミッションで作成され、セキュアに保存されます
+//
+// 引数:
+//   - token: 保存するOAuthトークン
+//
+// 戻り値:
+//   - error: ファイル作成エラーまたは保存エラー
+func SaveToken(token *oauth2.Token) error {
+	repo, err := repository.DefaultTokenFileRepo()
+	if err != nil {
+		return fmt.Errorf("トークンリポジトリの作成に失敗しました: %w", err)
+	}
+	return repo.Save(token)
+}
+
+// LoadToken は保存されたOAuth2トークンを読み込みます
+//
+// ~/.config/gcal_mcp/token.json からトークンを読み込みます
+// ファイルが存在しない場合やJSONが不正な場合はエラーを返します
+//
+// 戻り値:
+//   - *oauth2.Token: 読み込まれたトークン
+//   - error: ファイル読み込みエラーまたはJSONパースエラー
+func LoadToken() (*oauth2.Token, error) {
+	repo, err := repository.DefaultTokenFileRepo()
+	if err != nil {
+		return nil, fmt.Errorf("トークンリポジトリの作成に失敗しました: %w", err)
+	}
+	return repo.Load()
 }
 
 // startLocalServer は認証コードを受け取るためのローカルサーバーを起動します
