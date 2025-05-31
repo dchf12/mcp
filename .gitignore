@@ -17,6 +17,7 @@ node_modules/
 .idea
 .vscode
 .cursor
+.claude
 .roo
 scripts/
 *.suo
