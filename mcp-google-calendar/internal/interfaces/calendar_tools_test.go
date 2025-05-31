@@ -179,6 +179,24 @@ func TestCreateEventTool_Execute(t *testing.T) {
 			mockError:   nil,
 			expectError: true,
 		},
+		{
+			name: "正常系: 説明なしでイベント作成成功",
+			input: map[string]interface{}{
+				"id":    "1",
+				"title": "テスト会議",
+				"start": map[string]interface{}{
+					"dateTime": now.Format(time.RFC3339),
+					"timeZone": "Asia/Tokyo",
+				},
+				"end": map[string]interface{}{
+					"dateTime": now.Add(time.Hour).Format(time.RFC3339),
+					"timeZone": "Asia/Tokyo",
+				},
+			},
+			mockEvent:   validEvent,
+			mockError:   nil,
+			expectError: false,
+		},
 	}
 
 	for _, tt := range tests {

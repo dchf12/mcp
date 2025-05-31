@@ -56,7 +56,7 @@ type CreateEventTool struct {
 type CreateEventInput struct {
 	CalendarID  string          `json:"calendar_id"`
 	Title       string          `json:"title"`
-	Description string          `json:"description"`
+	Description string          `json:"description,omitempty"`
 	Start       domain.DateTime `json:"start"`
 	End         domain.DateTime `json:"end"`
 	Location    *string         `json:"location,omitempty"`
@@ -83,7 +83,6 @@ func (t *CreateEventTool) GetDefinition() mcp.Tool {
 			mcp.Description("イベントのタイトル"),
 		),
 		mcp.WithString("description",
-			mcp.Required(),
 			mcp.Description("イベントの説明"),
 		),
 		mcp.WithObject("start",
