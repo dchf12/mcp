@@ -31,6 +31,26 @@ type DateTime struct {
 	TimeZone string `json:"timeZone,omitempty"`
 }
 
+// Validate はDateTimeオブジェクトのバリデーションを行います
+func (dt *DateTime) Validate() error {
+	if dt.DateTime != "" {
+		_, err := time.Parse(time.RFC3339, dt.DateTime)
+		if err != nil {
+			return fmt.Errorf("invalid datetime format, must be RFC3339: %w", err)
+		}
+	}
+	if dt.TimeZone != "" {
+		loc, err := time.LoadLocation(dt.TimeZone)
+		if err != nil {
+			return fmt.Errorf("invalid timezone: %w", err)
+		}
+		if loc == nil {
+			return fmt.Errorf("invalid timezone: location is nil")
+		}
+	}
+	return nil
+}
+
 // Validate はCalendarエンティティのバリデーションを行います
 func (c *Calendar) Validate() error {
 	if c.ID == "" {
@@ -61,15 +81,19 @@ func (e *Event) validateDateTime() error {
 	if e.End.DateTime == "" && e.End.Date == "" {
 		return fmt.Errorf("event end date/time is required")
 	}
+
+	// 日時形式とタイムゾーンのバリデーション
+	if err := e.Start.Validate(); err != nil {
+		return fmt.Errorf("invalid start time: %w", err)
+	}
+	if err := e.End.Validate(); err != nil {
+		return fmt.Errorf("invalid end time: %w", err)
+	}
+
+	// 開始時刻と終了時刻の前後関係のチェック
 	if e.Start.DateTime != "" && e.End.DateTime != "" {
-		startTime, err := time.Parse(time.RFC3339, e.Start.DateTime)
-		if err != nil {
-			return fmt.Errorf("invalid start datetime format: %w", err)
-		}
-		endTime, err := time.Parse(time.RFC3339, e.End.DateTime)
-		if err != nil {
-			return fmt.Errorf("invalid end datetime format: %w", err)
-		}
+		startTime, _ := time.Parse(time.RFC3339, e.Start.DateTime) // エラーは既にValidate()でチェック済み
+		endTime, _ := time.Parse(time.RFC3339, e.End.DateTime)     // エラーは既にValidate()でチェック済み
 		if endTime.Before(startTime) {
 			return fmt.Errorf("event end time cannot be before start time")
 		}

@@ -197,6 +197,60 @@ func TestCreateEventTool_Execute(t *testing.T) {
 			mockError:   nil,
 			expectError: false,
 		},
+		{
+			name: "異常系: 不正な日時形式（開始日時）",
+			input: map[string]interface{}{
+				"calendar_id": "1",
+				"title":       "テスト会議",
+				"start": map[string]interface{}{
+					"dateTime": "2025/05/31 10:00:00", // 不正な形式
+					"timeZone": "Asia/Tokyo",
+				},
+				"end": map[string]interface{}{
+					"dateTime": now.Add(time.Hour).Format(time.RFC3339),
+					"timeZone": "Asia/Tokyo",
+				},
+			},
+			mockEvent:   nil,
+			mockError:   nil,
+			expectError: true,
+		},
+		{
+			name: "異常系: 不正なタイムゾーン",
+			input: map[string]interface{}{
+				"calendar_id": "1",
+				"title":       "テスト会議",
+				"start": map[string]interface{}{
+					"dateTime": now.Format(time.RFC3339),
+					"timeZone": "Invalid/TimeZone",
+				},
+				"end": map[string]interface{}{
+					"dateTime": now.Add(time.Hour).Format(time.RFC3339),
+					"timeZone": "Asia/Tokyo",
+				},
+			},
+			mockEvent:   nil,
+			mockError:   nil,
+			expectError: true,
+		},
+		{
+			name: "異常系: 終了日時が開始日時より前",
+			input: map[string]interface{}{
+				"calendar_id": "1",
+				"title":       "テスト会議",
+				"start": map[string]interface{}{
+					"dateTime": now.Format(time.RFC3339),
+					"timeZone": "Asia/Tokyo",
+				},
+				"end": map[string]interface{}{
+					"dateTime": now.Add(-time.Hour).Format(time.RFC3339),
+					"timeZone": "Asia/Tokyo",
+				},
+			},
+			mockEvent:   nil,
+			mockError:   nil,
+			expectError: true,
+		},
 	}
 
 	for _, tt := range tests {
