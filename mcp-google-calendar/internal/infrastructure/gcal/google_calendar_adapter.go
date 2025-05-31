@@ -4,84 +4,97 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/dch/mcp-google-calendar/internal/domain"
 	"google.golang.org/api/calendar/v3"
 	"google.golang.org/api/option"
+
+	"github.com/dch/mcp-google-calendar/internal/domain"
 )
 
-// GoogleCalendarAdapter は Google Calendar API とのインタラクションを担当します
-type GoogleCalendarAdapter struct {
-	service *calendar.Service
+type CalendarService interface {
+	ListCalendars(ctx context.Context) ([]domain.Calendar, error)
+	CreateEvent(ctx context.Context, calID string, ev *domain.Event) (*domain.Event, error)
 }
 
-// New は新しい GoogleCalendarAdapter インスタンスを作成します
+type GoogleCalendarAdapter struct {
+	service CalendarService
+}
+
 func New(ctx context.Context, opts ...option.ClientOption) (*GoogleCalendarAdapter, error) {
-	service, err := calendar.NewService(ctx, opts...)
+	raw, err := calendar.NewService(ctx, opts...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create calendar service: %w", err)
 	}
-
 	return &GoogleCalendarAdapter{
-		service: service,
+		service: &googleCalendarService{raw: raw},
 	}, nil
 }
 
-// ListCalendars は利用可能なカレンダーの一覧を取得します
 func (a *GoogleCalendarAdapter) ListCalendars(ctx context.Context) ([]domain.Calendar, error) {
-	list, err := a.service.CalendarList.List().Do()
+	return a.service.ListCalendars(ctx)
+}
+
+func (a *GoogleCalendarAdapter) CreateEvent(ctx context.Context, calendarID string, event *domain.Event) (*domain.Event, error) {
+	return a.service.CreateEvent(ctx, calendarID, event)
+}
+
+// googleCalendarService は google カレンダー API を直接呼び出し、
+// CalendarService インターフェースを実装する内部用ラッパーです。
+type googleCalendarService struct {
+	raw *calendar.Service
+}
+
+var _ CalendarService = (*googleCalendarService)(nil)
+
+func (g *googleCalendarService) ListCalendars(ctx context.Context) ([]domain.Calendar, error) {
+	list, err := g.raw.CalendarList.List().Do()
 	if err != nil {
 		return nil, fmt.Errorf("failed to list calendars: %w", err)
 	}
-
-	calendars := make([]domain.Calendar, len(list.Items))
+	cals := make([]domain.Calendar, len(list.Items))
 	for i, item := range list.Items {
-		calendars[i] = domain.Calendar{
+		cals[i] = domain.Calendar{
 			ID:          item.Id,
 			Title:       item.Summary,
 			Description: item.Description,
 			TimeZone:    item.TimeZone,
 		}
 	}
-
-	return calendars, nil
+	return cals, nil
 }
 
-// CreateEvent は指定したカレンダーに新しいイベントを作成します
-func (a *GoogleCalendarAdapter) CreateEvent(ctx context.Context, calendarID string, event *domain.Event) (*domain.Event, error) {
-	if event == nil {
+func (g *googleCalendarService) CreateEvent(ctx context.Context, calID string, ev *domain.Event) (*domain.Event, error) {
+	if ev == nil {
 		return nil, fmt.Errorf("event cannot be nil")
 	}
 
-	calendarEvent := &calendar.Event{
-		Summary:     event.Title,
-		Description: event.Description,
+	gcalEv := &calendar.Event{
+		Summary:     ev.Title,
+		Description: ev.Description,
 		Start: &calendar.EventDateTime{
-			DateTime: event.Start.DateTime,
-			Date:     event.Start.Date,
-			TimeZone: event.Start.TimeZone,
+			DateTime: ev.Start.DateTime,
+			Date:     ev.Start.Date,
+			TimeZone: ev.Start.TimeZone,
 		},
 		End: &calendar.EventDateTime{
-			DateTime: event.End.DateTime,
-			Date:     event.End.Date,
-			TimeZone: event.End.TimeZone,
+			DateTime: ev.End.DateTime,
+			Date:     ev.End.Date,
+			TimeZone: ev.End.TimeZone,
 		},
 	}
 
-	if event.Location != nil {
-		calendarEvent.Location = *event.Location
+	if ev.Location != nil {
+		gcalEv.Location = *ev.Location
 	}
 
-	if len(event.Attendees) > 0 {
-		attendees := make([]*calendar.EventAttendee, len(event.Attendees))
-		for i, email := range event.Attendees {
-			attendees[i] = &calendar.EventAttendee{
-				Email: email,
-			}
+	if len(ev.Attendees) > 0 {
+		attendees := make([]*calendar.EventAttendee, len(ev.Attendees))
+		for i, email := range ev.Attendees {
+			attendees[i] = &calendar.EventAttendee{Email: email}
 		}
-		calendarEvent.Attendees = attendees
+		gcalEv.Attendees = attendees
 	}
 
-	created, err := a.service.Events.Insert(calendarID, calendarEvent).Do()
+	created, err := g.raw.Events.Insert(calID, gcalEv).Do()
 	if err != nil {
 		return nil, fmt.Errorf("failed to create event: %w", err)
 	}
@@ -101,12 +114,4 @@ func (a *GoogleCalendarAdapter) CreateEvent(ctx context.Context, calendarID stri
 			TimeZone: created.End.TimeZone,
 		},
 	}, nil
-}
-
-// GetScopes は必要な OAuth スコープを返します
-func (a *GoogleCalendarAdapter) GetScopes() []string {
-	return []string{
-		calendar.CalendarReadonlyScope,
-		calendar.CalendarEventsScope,
-	}
 }
