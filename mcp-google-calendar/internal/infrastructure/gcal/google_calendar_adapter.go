@@ -54,7 +54,7 @@ type googleCalendarService struct {
 var _ CalendarService = (*googleCalendarService)(nil)
 
 func (g *googleCalendarService) ListCalendars(ctx context.Context) ([]domain.Calendar, error) {
-	list, err := g.raw.CalendarList.List().Do()
+	list, err := g.raw.CalendarList.List().Context(ctx).Do()
 	if err != nil {
 		return nil, errors.NewAPIError("list_calendars", "failed to list calendars", 500, err)
 	}
@@ -106,7 +106,7 @@ func (g *googleCalendarService) CreateEvent(ctx context.Context, calID string, e
 		gcalEv.Attendees = attendees
 	}
 
-	created, err := g.raw.Events.Insert(calID, gcalEv).Do()
+	created, err := g.raw.Events.Insert(calID, gcalEv).Context(ctx).Do()
 	if err != nil {
 		return nil, errors.NewAPIError("create_event", "failed to create event", 500, err)
 	}
