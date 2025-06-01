@@ -2,6 +2,7 @@ package interfaces
 
 import (
 	"context"
+	"errors"
 
 	"github.com/mark3labs/mcp-go/server"
 
@@ -18,6 +19,17 @@ import (
 // token: 認証トークン
 // server: MCPサーバーインスタンス
 func RegisterCalendarTools(s *server.MCPServer, conf *config.Config, token *oauth2.Token) error {
+	// パラメータ検証
+	if s == nil {
+		return errors.New("サーバーインスタンスが指定されていません")
+	}
+	if conf == nil {
+		return errors.New("OAuth設定が指定されていません")
+	}
+	if token == nil {
+		return errors.New("認証トークンが指定されていません")
+	}
+
 	// OAuth設定を作成
 	oauthConfig := conf.NewOAuthConfig()
 

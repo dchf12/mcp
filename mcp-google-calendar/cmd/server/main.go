@@ -2,11 +2,11 @@ package main
 
 import (
 	"context"
-	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/dch/mcp-google-calendar/internal/interfaces"
 	"github.com/dch/mcp-google-calendar/pkg/config"
@@ -14,9 +14,14 @@ import (
 )
 
 const (
-	ServerName    = "Google Calendar MCP Server"
-	ServerVersion = "0.1.0"
+	ServerName      = "Google Calendar MCP Server"
+	ServerVersion   = "0.1.0"
+	ShutdownTimeout = 10 * time.Second
 )
+
+func init() {
+	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{})))
+}
 
 func main() {
 	// コンテキストの設定
@@ -27,9 +32,25 @@ func main() {
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 	go func() {
-		<-sigChan
-		log.Println("シャットダウンシグナルを受信しました")
+		sig := <-sigChan
+		slog.Info("シャットダウンシグナルを受信しました", "signal", sig)
+
+		// グレースフルシャットダウンのためのコンテキスト
+		ctx, cancelShutdown := context.WithTimeout(context.Background(), ShutdownTimeout)
+		defer cancelShutdown()
+
+		// ここでクリーンアップ処理を実行
+		slog.Info("クリーンアップ処理を開始します...")
+
+		// キャンセル実行
 		cancel()
+
+		select {
+		case <-ctx.Done():
+			if ctx.Err() == context.DeadlineExceeded {
+				slog.Warn("強制シャットダウンを実行します")
+			}
+		}
 	}()
 
 	// MCPサーバーの初期化
@@ -43,29 +64,33 @@ func main() {
 	// 認証情報の設定を読み込み
 	credPath, err := config.GetCredentialsPath()
 	if err != nil {
-		log.Fatalf("認証情報の読み込みに失敗しました: %v", err)
+		slog.Error("認証情報の読み込みに失敗しました", "error", err)
+		os.Exit(1)
 	}
 
 	conf, err := config.LoadCredentials(credPath)
 	if err != nil {
-		log.Fatalf("認証情報の解析に失敗しました: %v", err)
+		slog.Error("認証情報の解析に失敗しました", "error", err)
+		os.Exit(1)
 	}
 
 	// OAuth認証フローを実行
 	token, err := config.AuthFlow(ctx, conf)
 	if err != nil {
-		log.Fatalf("認証フローに失敗しました: %v", err)
+		slog.Error("認証フローに失敗しました", "error", err)
+		os.Exit(1)
 	}
 
 	// カレンダーツールの登録
 	if err := interfaces.RegisterCalendarTools(s, conf, token); err != nil {
-		log.Fatalf("カレンダーツールの登録に失敗しました: %v", err)
+		slog.Error("カレンダーツールの登録に失敗しました", "error", err)
+		os.Exit(1)
 	}
 
 	// サーバーの起動
-	fmt.Printf("%s (v%s) を起動します\n", ServerName, ServerVersion)
+	slog.Info("サーバーを起動します", "name", ServerName, "version", ServerVersion)
 	if err := server.ServeStdio(s); err != nil {
-		log.Printf("サーバーエラー: %v\n", err)
+		slog.Error("サーバーエラー", "error", err)
 		os.Exit(1)
 	}
 }
