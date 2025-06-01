@@ -2,11 +2,11 @@ package interfaces
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"log"
+	"log/slog"
 
 	"github.com/mark3labs/mcp-go/mcp"
+	"github.com/mitchellh/mapstructure"
 
 	"github.com/dch/mcp-google-calendar/internal/domain"
 	"github.com/dch/mcp-google-calendar/internal/usecase"
@@ -35,7 +35,7 @@ func (t *ListCalendarTool) GetDefinition() mcp.Tool {
 func (t *ListCalendarTool) Execute(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	calendars, err := t.getCalendarsUseCase.Execute(ctx)
 	if err != nil {
-		log.Printf("Failed to get calendars: %v", err)
+		slog.Error("failed to get calendars", "error", err)
 		return nil, fmt.Errorf("カレンダーの取得に失敗しました: %w", err)
 	}
 
@@ -107,12 +107,8 @@ func (t *CreateEventTool) Execute(ctx context.Context, request mcp.CallToolReque
 	if request.Params.Arguments == nil {
 		return nil, fmt.Errorf("入力パラメータが指定されていません")
 	}
-	argsJSON, err := json.Marshal(request.Params.Arguments)
-	if err != nil {
-		return nil, fmt.Errorf("入力パラメータのマーシャルに失敗しました: %w", err)
-	}
 
-	if err := json.Unmarshal(argsJSON, &input); err != nil {
+	if err := mapstructure.Decode(request.Params.Arguments, &input); err != nil {
 		return nil, fmt.Errorf("入力パラメータの解析に失敗しました: %w", err)
 	}
 
@@ -127,7 +123,7 @@ func (t *CreateEventTool) Execute(ctx context.Context, request mcp.CallToolReque
 
 	createdEvent, err := t.createEventUseCase.Execute(ctx, input.CalendarID, event)
 	if err != nil {
-		log.Printf("Failed to create event: %v", err)
+		slog.Error("failed to create event", "error", err)
 		return nil, fmt.Errorf("イベントの作成に失敗しました: %w", err)
 	}
 

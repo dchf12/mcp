@@ -31,7 +31,7 @@ type RateLimiter struct {
 func NewRateLimiter() *RateLimiter {
 	// 1秒あたり1リクエストのレートリミッターを設定
 	// バースト値は10に設定して、短時間の突発的なリクエストに対応
-	limiter := rate.NewLimiter(rate.Limit(QPS), QPS)
+	limiter := rate.NewLimiter(rate.Limit(QPS), 10)
 
 	// 指数バックオフの設定
 	expBackoff := backoff.NewExponentialBackOff()

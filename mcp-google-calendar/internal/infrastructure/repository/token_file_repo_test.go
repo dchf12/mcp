@@ -6,12 +6,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
 	"golang.org/x/oauth2"
 )
 
 func TestTokenFileRepo(t *testing.T) {
 	tempDir := t.TempDir()
-	repo := NewTokenFileRepo(tempDir)
+	repo, err := NewTokenFileRepo(tempDir)
+	require.NoError(t, err)
 
 	t.Run("Save and Load token", func(t *testing.T) {
 		token := &oauth2.Token{
@@ -49,7 +51,7 @@ func TestTokenFileRepo(t *testing.T) {
 			t.Fatalf("failed to save token: %v", err)
 		}
 
-		info, err := os.Stat(filepath.Join(tempDir, "token.json"))
+		info, err := os.Stat(filepath.Join(tempDir, "token.enc"))
 		if err != nil {
 			t.Fatalf("failed to stat token file: %v", err)
 		}
@@ -60,8 +62,9 @@ func TestTokenFileRepo(t *testing.T) {
 	})
 
 	t.Run("Load non-existent file", func(t *testing.T) {
-		repo := NewTokenFileRepo(t.TempDir())
-		_, err := repo.Load()
+		repo, err := NewTokenFileRepo(t.TempDir())
+		require.NoError(t, err)
+		_, err = repo.Load()
 		if err == nil {
 			t.Error("expected error when loading non-existent file")
 		}
@@ -69,12 +72,13 @@ func TestTokenFileRepo(t *testing.T) {
 
 	t.Run("Load invalid JSON", func(t *testing.T) {
 		dir := t.TempDir()
-		err := os.WriteFile(filepath.Join(dir, "token.json"), []byte("invalid json"), 0600)
+		err := os.WriteFile(filepath.Join(dir, "token.enc"), []byte("invalid data"), 0600)
 		if err != nil {
 			t.Fatalf("failed to write invalid json: %v", err)
 		}
 
-		repo := NewTokenFileRepo(dir)
+		repo, err := NewTokenFileRepo(dir)
+		require.NoError(t, err)
 		_, err = repo.Load()
 		if err == nil {
 			t.Error("expected error when loading invalid JSON")
