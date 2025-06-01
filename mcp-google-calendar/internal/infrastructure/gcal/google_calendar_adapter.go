@@ -17,6 +17,7 @@ type CalendarService interface {
 
 type GoogleCalendarAdapter struct {
 	service CalendarService
+	limiter *RateLimiter
 }
 
 func New(ctx context.Context, opts ...option.ClientOption) (*GoogleCalendarAdapter, error) {
@@ -26,14 +27,21 @@ func New(ctx context.Context, opts ...option.ClientOption) (*GoogleCalendarAdapt
 	}
 	return &GoogleCalendarAdapter{
 		service: &googleCalendarService{raw: raw},
+		limiter: NewRateLimiter(),
 	}, nil
 }
 
 func (a *GoogleCalendarAdapter) ListCalendars(ctx context.Context) ([]domain.Calendar, error) {
+	if err := a.limiter.Wait(ctx); err != nil {
+		return nil, err
+	}
 	return a.service.ListCalendars(ctx)
 }
 
 func (a *GoogleCalendarAdapter) CreateEvent(ctx context.Context, calendarID string, event *domain.Event) (*domain.Event, error) {
+	if err := a.limiter.Wait(ctx); err != nil {
+		return nil, err
+	}
 	return a.service.CreateEvent(ctx, calendarID, event)
 }
 

@@ -32,7 +32,10 @@ func TestGoogleCalendarAdapter_ListCalendars(t *testing.T) {
 		},
 	}
 
-	adapter := &GoogleCalendarAdapter{service: mockSvc}
+	adapter := &GoogleCalendarAdapter{
+		service: mockSvc,
+		limiter: NewRateLimiter(),
+	}
 
 	got, err := adapter.ListCalendars(context.Background())
 	require.NoError(t, err)
@@ -61,7 +64,10 @@ func TestGoogleCalendarAdapter_CreateEvent(t *testing.T) {
 			End:   wantEvent.End,
 		},
 	}
-	adapter := &GoogleCalendarAdapter{service: mockSvc}
+	adapter := &GoogleCalendarAdapter{
+		service: mockSvc,
+		limiter: NewRateLimiter(),
+	}
 
 	got, err := adapter.CreateEvent(context.Background(), "primary", &domain.Event{
 		Title: wantEvent.Title,
