@@ -93,7 +93,7 @@ func main() {
 	}
 
 	// カレンダーツールの登録
-	if err := interfaces.RegisterCalendarTools(s, conf, token); err != nil {
+	if err := interfaces.RegisterCalendarTools(ctx, s, conf, token); err != nil {
 		slog.Error("カレンダーツールの登録に失敗しました", "error", err)
 		os.Exit(1)
 	}

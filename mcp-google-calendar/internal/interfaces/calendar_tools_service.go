@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 
+	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 
 	"github.com/dch/mcp-google-calendar/internal/infrastructure/gcal"
@@ -15,10 +16,11 @@ import (
 
 // RegisterCalendarTools はカレンダー関連のツールをサーバーに登録します
 //
+// ctx: タイムアウトやキャンセルを制御するためのコンテキスト
 // conf: OAuth設定
 // token: 認証トークン
 // server: MCPサーバーインスタンス
-func RegisterCalendarTools(s *server.MCPServer, conf *config.Config, token *oauth2.Token) error {
+func RegisterCalendarTools(ctx context.Context, s *server.MCPServer, conf *config.Config, token *oauth2.Token) error {
 	// パラメータ検証
 	if s == nil {
 		return errors.New("サーバーインスタンスが指定されていません")
@@ -34,7 +36,6 @@ func RegisterCalendarTools(s *server.MCPServer, conf *config.Config, token *oaut
 	oauthConfig := conf.NewOAuthConfig()
 
 	// Google APIクライアントを作成
-	ctx := context.Background()
 	client := oauthConfig.Client(ctx, token)
 
 	// Google Calendarアダプタを作成
@@ -52,8 +53,25 @@ func RegisterCalendarTools(s *server.MCPServer, conf *config.Config, token *oaut
 	createTool := NewCreateEventTool(createEventUC)
 
 	// ツールを登録
-	s.AddTool(listTool.GetDefinition(), listTool.Execute)
-	s.AddTool(createTool.GetDefinition(), createTool.Execute)
+	s.AddTool(listTool.GetDefinition(), func(toolCtx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		// 親コンテキストが終了したら実行をキャンセル
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		default:
+			return listTool.Execute(toolCtx, req)
+		}
+	})
+
+	s.AddTool(createTool.GetDefinition(), func(toolCtx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		// 親コンテキストが終了したら実行をキャンセル
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		default:
+			return createTool.Execute(toolCtx, req)
+		}
+	})
 
 	return nil
 }

@@ -1,6 +1,7 @@
 package interfaces
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -75,8 +76,12 @@ func TestRegisterCalendarTools(t *testing.T) {
 				t.Fatal(err)
 			}
 
+			// タイムアウト付きのコンテキストを作成
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+
 			// ツールの登録
-			err := RegisterCalendarTools(tt.server, tt.conf, tt.token)
+			err := RegisterCalendarTools(ctx, tt.server, tt.conf, tt.token)
 
 			// 結果の検証
 			if tt.expectError {
