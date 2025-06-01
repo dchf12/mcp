@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
@@ -19,6 +20,7 @@ const (
 	ServerName      = "Google Calendar MCP Server"
 	ServerVersion   = "0.1.0"
 	ShutdownTimeout = 10 * time.Second
+	MetricsAddr     = ":9090"
 )
 
 func init() {
@@ -30,6 +32,8 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	var wg sync.WaitGroup
+
 	// シグナルハンドリングの設定
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
@@ -38,20 +42,25 @@ func main() {
 		slog.Info("シャットダウンシグナルを受信しました", "signal", sig)
 
 		// グレースフルシャットダウンのためのコンテキスト
-		ctx, cancelShutdown := context.WithTimeout(context.Background(), ShutdownTimeout)
+		shutdownCtx, cancelShutdown := context.WithTimeout(context.Background(), ShutdownTimeout)
 		defer cancelShutdown()
 
-		// ここでクリーンアップ処理を実行
-		slog.Info("クリーンアップ処理を開始します...")
-
-		// キャンセル実行
+		// コンテキストのキャンセルを実行
 		cancel()
 
+		// サブシステムの停止を待機
+		doneChan := make(chan struct{})
+		go func() {
+			wg.Wait()
+			close(doneChan)
+		}()
+
+		// シャットダウンタイムアウトの監視
 		select {
-		case <-ctx.Done():
-			if ctx.Err() == context.DeadlineExceeded {
-				slog.Warn("強制シャットダウンを実行します")
-			}
+		case <-shutdownCtx.Done():
+			slog.Warn("シャットダウンタイムアウト - 強制終了します")
+		case <-doneChan:
+			slog.Info("全てのサブシステムが正常に停止しました")
 		}
 	}()
 
@@ -89,10 +98,33 @@ func main() {
 		os.Exit(1)
 	}
 
-	// メトリクスエンドポイントの追加
-	http.Handle("/metrics", promhttp.Handler())
+	// メトリクスサーバーの起動
+	metricsServer := &http.Server{
+		Addr:    MetricsAddr,
+		Handler: promhttp.Handler(),
+	}
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		slog.Info("メトリクスサーバーを起動します", "addr", MetricsAddr)
+		if err := metricsServer.ListenAndServe(); err != http.ErrServerClosed {
+			slog.Error("メトリクスサーバーエラー", "error", err)
+		}
+	}()
 
-	// サーバーの起動
+	// メトリクスサーバーのグレースフルシャットダウン
+	go func() {
+		<-ctx.Done()
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		slog.Info("メトリクスサーバーをシャットダウンします")
+		if err := metricsServer.Shutdown(shutdownCtx); err != nil {
+			slog.Error("メトリクスサーバーのシャットダウンに失敗しました", "error", err)
+		}
+	}()
+
+	// MCPサーバーの起動
 	slog.Info("サーバーを起動します", "name", ServerName, "version", ServerVersion)
 	if err := server.ServeStdio(s); err != nil {
 		slog.Error("サーバーエラー", "error", err)
