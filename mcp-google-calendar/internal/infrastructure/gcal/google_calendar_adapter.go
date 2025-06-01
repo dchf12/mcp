@@ -2,12 +2,12 @@ package gcal
 
 import (
 	"context"
-	"fmt"
 
 	"google.golang.org/api/calendar/v3"
 	"google.golang.org/api/option"
 
 	"github.com/dch/mcp-google-calendar/internal/domain"
+	"github.com/dch/mcp-google-calendar/pkg/errors"
 )
 
 type CalendarService interface {
@@ -22,7 +22,7 @@ type GoogleCalendarAdapter struct {
 func New(ctx context.Context, opts ...option.ClientOption) (*GoogleCalendarAdapter, error) {
 	raw, err := calendar.NewService(ctx, opts...)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create calendar service: %w", err)
+		return nil, errors.NewAPIError("new_service", "failed to create calendar service", 500, err)
 	}
 	return &GoogleCalendarAdapter{
 		service: &googleCalendarService{raw: raw},
@@ -48,7 +48,7 @@ var _ CalendarService = (*googleCalendarService)(nil)
 func (g *googleCalendarService) ListCalendars(ctx context.Context) ([]domain.Calendar, error) {
 	list, err := g.raw.CalendarList.List().Do()
 	if err != nil {
-		return nil, fmt.Errorf("failed to list calendars: %w", err)
+		return nil, errors.NewAPIError("list_calendars", "failed to list calendars", 500, err)
 	}
 	cals := make([]domain.Calendar, len(list.Items))
 	for i, item := range list.Items {
@@ -64,7 +64,11 @@ func (g *googleCalendarService) ListCalendars(ctx context.Context) ([]domain.Cal
 
 func (g *googleCalendarService) CreateEvent(ctx context.Context, calID string, ev *domain.Event) (*domain.Event, error) {
 	if ev == nil {
-		return nil, fmt.Errorf("event cannot be nil")
+		return nil, errors.NewValidationError("event", "event cannot be nil", nil)
+	}
+
+	if err := ev.Validate(); err != nil {
+		return nil, errors.NewValidationError("event", "invalid event data", err)
 	}
 
 	gcalEv := &calendar.Event{
@@ -96,7 +100,7 @@ func (g *googleCalendarService) CreateEvent(ctx context.Context, calID string, e
 
 	created, err := g.raw.Events.Insert(calID, gcalEv).Do()
 	if err != nil {
-		return nil, fmt.Errorf("failed to create event: %w", err)
+		return nil, errors.NewAPIError("create_event", "failed to create event", 500, err)
 	}
 
 	return &domain.Event{
@@ -113,5 +117,15 @@ func (g *googleCalendarService) CreateEvent(ctx context.Context, calID string, e
 			Date:     created.End.Date,
 			TimeZone: created.End.TimeZone,
 		},
+		Location:  &created.Location,
+		Attendees: getEventAttendees(created.Attendees),
 	}, nil
+}
+
+func getEventAttendees(attendees []*calendar.EventAttendee) []string {
+	emails := make([]string, len(attendees))
+	for i, a := range attendees {
+		emails[i] = a.Email
+	}
+	return emails
 }

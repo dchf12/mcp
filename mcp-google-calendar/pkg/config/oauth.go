@@ -3,11 +3,13 @@ package config
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"os/exec"
 	"runtime"
 
 	"github.com/dch/mcp-google-calendar/internal/infrastructure/repository"
+	"github.com/dch/mcp-google-calendar/pkg/errors"
 	"golang.org/x/oauth2"
 )
 
@@ -44,24 +46,25 @@ func AuthFlow(ctx context.Context, config *Config) (*oauth2.Token, error) {
 	authURL := GetAuthURL(oauthConfig)
 
 	if err := openBrowser(authURL); err != nil {
-		fmt.Printf("ブラウザで以下のURLを開いてください:\n%s\n", authURL)
+		// ブラウザを開けない場合はURLを表示するだけなので、エラーとしては扱わない
+		slog.Info("ブラウザでURLを開けません。手動でアクセスしてください", "url", authURL)
 	}
 
 	// 認証コードを受け取るためのローカルサーバーを起動
 	code, err := startLocalServer(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("認証コードの取得に失敗しました: %w", err)
+		return nil, errors.NewOAuthError("authorization", "failed to get authorization code", err)
 	}
 
 	// 認証コードをトークンと交換
 	token, err := oauthConfig.Exchange(ctx, code)
 	if err != nil {
-		return nil, fmt.Errorf("トークンの取得に失敗しました: %w", err)
+		return nil, errors.NewOAuthError("token_exchange", "failed to exchange code for token", err)
 	}
 
 	// トークンを保存
 	if err := SaveToken(token); err != nil {
-		return nil, fmt.Errorf("トークンの保存に失敗しました: %w", err)
+		return nil, errors.NewOAuthError("token_save", "failed to save token", err)
 	}
 
 	return token, nil
@@ -93,7 +96,7 @@ func GetAuthURL(config *oauth2.Config) string {
 func SaveToken(token *oauth2.Token) error {
 	repo, err := repository.DefaultTokenFileRepo()
 	if err != nil {
-		return fmt.Errorf("トークンリポジトリの作成に失敗しました: %w", err)
+		return errors.NewOAuthError("token_repository", "failed to create token repository", err)
 	}
 	return repo.Save(token)
 }
@@ -101,17 +104,22 @@ func SaveToken(token *oauth2.Token) error {
 // LoadToken は保存されたOAuth2トークンを読み込みます
 //
 // ~/.config/gcal_mcp/token.json からトークンを読み込みます
-// ファイルが存在しない場合やJSONが不正な場合はエラーを返します
 //
 // 戻り値:
-//   - *oauth2.Token: 読み込まれたトークン
-//   - error: ファイル読み込みエラーまたはJSONパースエラー
+//   - *oauth2.Token: 読み込んだトークン
+//   - error: ファイル読み込みエラーまたはJSONデコードエラー
 func LoadToken() (*oauth2.Token, error) {
 	repo, err := repository.DefaultTokenFileRepo()
 	if err != nil {
-		return nil, fmt.Errorf("トークンリポジトリの作成に失敗しました: %w", err)
+		return nil, errors.NewOAuthError("token_repository", "failed to create token repository", err)
 	}
-	return repo.Load()
+
+	token, err := repo.Load()
+	if err != nil {
+		return nil, errors.NewOAuthError("token_load", "failed to load token", err)
+	}
+
+	return token, nil
 }
 
 // startLocalServer は認証コードを受け取るためのローカルサーバーを起動します

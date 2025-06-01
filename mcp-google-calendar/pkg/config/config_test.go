@@ -105,6 +105,9 @@ func TestGetCredentialsPath(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			// 環境変数をクリア
+			t.Setenv(EnvCredentialsPath, "")
+
 			// 環境変数とファイルの設定
 			tempDir := t.TempDir()
 			filePath := filepath.Join(tempDir, "credentials.json")

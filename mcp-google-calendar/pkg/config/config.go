@@ -3,9 +3,10 @@ package config
 
 import (
 	"encoding/json"
-	"fmt"
 	"os"
+	"path/filepath"
 
+	"github.com/dch/mcp-google-calendar/pkg/errors"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
 )
@@ -47,12 +48,12 @@ type Config struct {
 func LoadCredentials(filePath string) (*Config, error) {
 	data, err := os.ReadFile(filePath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read credentials file: %w", err)
+		return nil, errors.NewConfigError("credentials", "failed to read file", err)
 	}
 
 	var conf Config
 	if err := json.Unmarshal(data, &conf); err != nil {
-		return nil, fmt.Errorf("failed to parse credentials file: %w", err)
+		return nil, errors.NewConfigError("credentials", "invalid JSON format", err)
 	}
 
 	if err := conf.validate(); err != nil {
@@ -73,17 +74,23 @@ func LoadCredentials(filePath string) (*Config, error) {
 func GetCredentialsPath() (string, error) {
 	path := os.Getenv(EnvCredentialsPath)
 	if path == "" {
-		return "", fmt.Errorf("GCAL_CREDENTIALS environment variable is not set")
+		return "", errors.NewConfigError(EnvCredentialsPath, "environment variable not set", nil)
 	}
 
-	if _, err := os.Stat(path); err != nil {
+	// 絶対パスに変換
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		return "", errors.NewConfigError("credentials", "failed to resolve absolute path", err)
+	}
+
+	if _, err := os.Stat(absPath); err != nil {
 		if os.IsNotExist(err) {
-			return "", fmt.Errorf("credentials file does not exist at %s", path)
+			return "", errors.NewConfigError("credentials", "file does not exist", err)
 		}
-		return "", fmt.Errorf("failed to access credentials file: %w", err)
+		return "", errors.NewConfigError("credentials", "failed to access file", err)
 	}
 
-	return path, nil
+	return absPath, nil
 }
 
 // validate は設定値のバリデーションを行います
@@ -91,13 +98,13 @@ func GetCredentialsPath() (string, error) {
 // 必須フィールド（ClientID、ClientSecret、RedirectURL）が設定されているか確認します
 func (c *Config) validate() error {
 	if c.ClientID == "" {
-		return fmt.Errorf("client_id is required in the credentials file")
+		return errors.NewValidationError("client_id", "required field is empty", nil)
 	}
 	if c.ClientSecret == "" {
-		return fmt.Errorf("client_secret is required in the credentials file")
+		return errors.NewValidationError("client_secret", "required field is empty", nil)
 	}
 	if c.RedirectURL == "" {
-		return fmt.Errorf("redirect_url is required in the credentials file")
+		return errors.NewValidationError("redirect_url", "required field is empty", nil)
 	}
 	return nil
 }
@@ -143,7 +150,7 @@ func (c *Config) NewOAuthConfig() *oauth2.Config {
 func ConfigFromJSON(jsonData []byte) (*oauth2.Config, error) {
 	var conf Config
 	if err := json.Unmarshal(jsonData, &conf); err != nil {
-		return nil, fmt.Errorf("failed to parse OAuth configuration: %w", err)
+		return nil, errors.NewConfigError("credentials", "invalid JSON format", err)
 	}
 
 	if err := conf.validate(); err != nil {
