@@ -7,7 +7,6 @@ import (
 	"log"
 
 	"github.com/mark3labs/mcp-go/mcp"
-	"github.com/mark3labs/mcp-go/server"
 
 	"github.com/dch/mcp-google-calendar/internal/domain"
 	"github.com/dch/mcp-google-calendar/internal/usecase"
@@ -137,13 +136,4 @@ func (t *CreateEventTool) Execute(ctx context.Context, request mcp.CallToolReque
 		Content: []mcp.Content{mcp.NewTextContent("イベントを作成しました")},
 		IsError: false,
 	}, nil
-}
-
-// RegisterCalendarTools はカレンダー関連のツールをサーバーに登録します
-func RegisterCalendarTools(s *server.MCPServer, getCalendarsUC *usecase.GetCalendarsUseCase, createEventUC *usecase.CreateEventUseCase) {
-	listTool := NewListCalendarTool(getCalendarsUC)
-	createTool := NewCreateEventTool(createEventUC)
-
-	s.AddTool(listTool.GetDefinition(), listTool.Execute)
-	s.AddTool(createTool.GetDefinition(), createTool.Execute)
 }
