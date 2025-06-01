@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"log/slog"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
@@ -11,6 +12,7 @@ import (
 	"github.com/dch/mcp-google-calendar/internal/interfaces"
 	"github.com/dch/mcp-google-calendar/pkg/config"
 	"github.com/mark3labs/mcp-go/server"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 const (
@@ -86,6 +88,9 @@ func main() {
 		slog.Error("カレンダーツールの登録に失敗しました", "error", err)
 		os.Exit(1)
 	}
+
+	// メトリクスエンドポイントの追加
+	http.Handle("/metrics", promhttp.Handler())
 
 	// サーバーの起動
 	slog.Info("サーバーを起動します", "name", ServerName, "version", ServerVersion)

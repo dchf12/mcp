@@ -2,6 +2,7 @@ package gcal
 
 import (
 	"context"
+	"time"
 
 	"google.golang.org/api/calendar/v3"
 	"google.golang.org/api/option"
@@ -20,6 +21,15 @@ type GoogleCalendarAdapter struct {
 	limiter *RateLimiter
 }
 
+// NewWithService はテスト用のコンストラクタ。
+// 実際の Google API を呼び出す代わりに任意の CalendarService を注入できる。
+func NewWithService(svc CalendarService) *GoogleCalendarAdapter {
+	return &GoogleCalendarAdapter{
+		service: svc,
+		limiter: NewRateLimiter(),
+	}
+}
+
 func New(ctx context.Context, opts ...option.ClientOption) (*GoogleCalendarAdapter, error) {
 	raw, err := calendar.NewService(ctx, opts...)
 	if err != nil {
@@ -32,17 +42,48 @@ func New(ctx context.Context, opts ...option.ClientOption) (*GoogleCalendarAdapt
 }
 
 func (a *GoogleCalendarAdapter) ListCalendars(ctx context.Context) ([]domain.Calendar, error) {
-	if err := a.limiter.Wait(ctx); err != nil {
+	start := time.Now()
+	operation := "list_calendars"
+	recordAPIRequest(operation)
+
+	// 速い判定のため Allow() で即座に残トークンを確認
+	if !a.limiter.Allow() {
+		recordRateLimitHit()
+		recordAPIError(operation, "rate_limit")
+		return nil, RateLimitExceededError
+	}
+
+	cals, err := a.service.ListCalendars(ctx)
+	recordAPIResponseDuration(operation, time.Since(start).Seconds())
+
+	if err != nil {
+		recordAPIError(operation, "api_error")
 		return nil, err
 	}
-	return a.service.ListCalendars(ctx)
+
+	return cals, nil
 }
 
 func (a *GoogleCalendarAdapter) CreateEvent(ctx context.Context, calendarID string, event *domain.Event) (*domain.Event, error) {
-	if err := a.limiter.Wait(ctx); err != nil {
+	start := time.Now()
+	operation := "create_event"
+	recordAPIRequest(operation)
+
+	if !a.limiter.Allow() {
+		recordRateLimitHit()
+		recordAPIError(operation, "rate_limit")
+		return nil, RateLimitExceededError
+	}
+
+	ev, err := a.service.CreateEvent(ctx, calendarID, event)
+	recordAPIResponseDuration(operation, time.Since(start).Seconds())
+
+	if err != nil {
+		recordAPIError(operation, "api_error")
 		return nil, err
 	}
-	return a.service.CreateEvent(ctx, calendarID, event)
+
+	return ev, nil
 }
 
 // googleCalendarService は google カレンダー API を直接呼び出し、
@@ -52,6 +93,9 @@ type googleCalendarService struct {
 }
 
 var _ CalendarService = (*googleCalendarService)(nil)
+
+// RateLimitExceededError is returned when the adapter hits its internal rate limit.
+var RateLimitExceededError = errors.NewAPIError("rate_limit", "rate limit exceeded", 429, nil)
 
 func (g *googleCalendarService) ListCalendars(ctx context.Context) ([]domain.Calendar, error) {
 	list, err := g.raw.CalendarList.List().Context(ctx).Do()
