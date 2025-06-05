@@ -32,69 +32,14 @@
 | **機能**         | カレンダー一覧取得、イベント作成（CRUD の一部）                                        |
 | **設計パターン**     | Clean Architecture + Adapter / Repository / Strategy              |
 | **セキュリティ**     | OAuth 2.0 デスクトップフロー、`calendar.events` & `calendar.readonly` のみ    |
-| **保存先**        | `~/.config/gcal_mcp/token.json` にトークンを 600 権限で保存                  |
+| **保存先**        | `~/.config/gcal_mcp/token.enc` にトークンを 600 権限で保存                  |
 | **外部依存**       | Google Calendar API v3 クライアント (google.golang.org/api/calendar/v3) |
 
 ---
 
 ## アーキテクチャ
 
-### コンポーネント図（Mermaid）
-
-[mermaid live](https://mermaid.live/)
-```mermaid
-flowchart TB
-  subgraph "Actor"
-    client["LLM Client (MCP クライアント)"]
-  end
-
-  subgraph "Interface Layer"
-    tool1[/list_calendars (Tool)/]
-    tool2[/create_event (Tool)/]
-  end
-
-  subgraph "Use‑Case Layer (Application)">
-    uc1[GetCalendars<br/>【Use‑Case】]
-    uc2[CreateEvent<br/>【Use‑Case】]
-  end
-
-  subgraph "Infrastructure Layer"
-    gcal[GoogleCalendarAdapter<br/>【Adapter】]
-    repo[TokenFileRepo<br/>【Repository】]
-  end
-
-  %% relations
-  client --> tool1 & tool2
-  tool1 --> uc1 --> gcal --> repo
-  tool2 --> uc2 --> gcal
-```
-
-#### レイヤ責務まとめ
-
-| レイヤ            | 役割                        | 主なパターン                         |
-| -------------- | ------------------------- | ------------------------------ |
-| Interface      | MCP ツールを定義し、LLM からの入力をパース | Adapter (Tools)                |
-| Use‑Case       | ビジネスロジックを実行しエンティティを加工     | Use‑Case / Application Service |
-| Infrastructure | 外部 API, ストレージ, OAuth をラップ | Adapter, Repository            |
-
----
-
-## ディレクトリ構成
-
-```text
-.
-├── cmd/
-│   └── server/            # mcp-go サーバー起動エントリ
-├── internal/
-│   ├── domain/            # Entity (Calendar, Event)
-│   ├── interfaces/        # MCP Tool 定義 & ハンドラ
-│   ├── usecase/           # ビジネスロジック
-│   └── infrastructure/
-│       ├── gcal/          # Google Calendar Adapter
-│       └── repository/    # TokenFileRepo (JSON)
-└── pkg/
-    └── config/            # 認証キー/設定読込
-```
+[ARCHITECTURE.md](ARCHITECTURE.md) を参照。
 
 ---
 
@@ -105,7 +50,7 @@ flowchart TB
 ```go
 package repository
 
-// ~/.config/gcal_mcp/token.json にアクセストークンを保存する実装
+// ~/.config/gcal_mcp/token.enc にアクセストークンを保存する実装
 ```
 
 ### MCP サーバー起動（抜粋）
@@ -139,7 +84,7 @@ log.Fatal(server.ServeHTTP(":8080", s))
    go run ./cmd/server
    ```
 
-   ブラウザが開くので Google アカウントで認可 → `token.json` が生成される。
+   ブラウザが開くので Google アカウントで認可 → `token.enc` が生成される。
 
 ---
 
@@ -147,7 +92,7 @@ log.Fatal(server.ServeHTTP(":8080", s))
 
 ### ChatGPT／Claude など LLM クライアントから
 
-1. クライアント設定で `mcpServers` に `http://localhost:8080` を追加。
+1. クライアント設定で `mcpServers` に ビルドしたバイナリを指定
 2. 例）「`来週火曜 15 時に \"チーム MTG\" を追加して`」とプロンプトすると、LLM が `create_event` ツールを呼び出し予定が作成される。
 
 ---
