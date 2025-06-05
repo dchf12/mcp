@@ -131,7 +131,7 @@ log.Fatal(server.ServeHTTP(":8080", s))
 3. `credentials.json` のパスを環境変数で渡す：
 
    ```bash
-   export GCAL_CREDENTIALS=$HOME/.config/gcal_mcp/credentials.json
+   export GCAL_CREDENTIALS_PATH=$HOME/.config/gcal_mcp/credentials.json
    ```
 4. 初回起動：
 
