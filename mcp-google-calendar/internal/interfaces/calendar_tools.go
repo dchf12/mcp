@@ -156,11 +156,12 @@ func (t *CreateEventTool) Execute(ctx context.Context, request mcp.CallToolReque
 	if err != nil {
 		slog.Error("failed to create event", "calendar_id", input.CalendarID, "title", input.Title, "error", err)
 
-		// より詳細なエラーメッセージを作成
-		errorMsg := fmt.Sprintf("イベントの作成に失敗しました (カレンダーID: %s, タイトル: %s): %v",
-			input.CalendarID, input.Title, err)
-
-		return nil, fmt.Errorf("イベントの作成に失敗しました: %s", errorMsg)
+		return nil, fmt.Errorf(
+			"イベントの作成に失敗しました (カレンダーID: %s, タイトル: %s): %w",
+			input.CalendarID,
+			input.Title,
+			err,
+		)
 	}
 
 	// MCPクライアントが解析しやすいJSON形式でレスポンスを作成
