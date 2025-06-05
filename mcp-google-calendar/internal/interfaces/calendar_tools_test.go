@@ -126,7 +126,7 @@ func TestCreateEventTool_Execute(t *testing.T) {
 		{
 			name: "正常系: イベント作成成功",
 			input: map[string]interface{}{
-				"id":          "1",
+				"calendar_id": "1",
 				"title":       "テスト会議",
 				"description": "説明",
 				"start": map[string]interface{}{
@@ -145,7 +145,7 @@ func TestCreateEventTool_Execute(t *testing.T) {
 		{
 			name: "異常系: UseCase実行エラー",
 			input: map[string]interface{}{
-				"id":          "1",
+				"calendar_id": "1",
 				"title":       "テスト会議",
 				"description": "説明",
 				"start": map[string]interface{}{
@@ -164,7 +164,7 @@ func TestCreateEventTool_Execute(t *testing.T) {
 		{
 			name: "異常系: 不正な入力パラメータ",
 			input: map[string]interface{}{
-				"id":          "1",
+				"calendar_id": "1",
 				"description": "説明",
 				"start": map[string]interface{}{
 					"dateTime": now.Format(time.RFC3339),
@@ -182,8 +182,8 @@ func TestCreateEventTool_Execute(t *testing.T) {
 		{
 			name: "正常系: 説明なしでイベント作成成功",
 			input: map[string]interface{}{
-				"id":    "1",
-				"title": "テスト会議",
+				"calendar_id": "1",
+				"title":       "テスト会議",
 				"start": map[string]interface{}{
 					"dateTime": now.Format(time.RFC3339),
 					"timeZone": "Asia/Tokyo",
