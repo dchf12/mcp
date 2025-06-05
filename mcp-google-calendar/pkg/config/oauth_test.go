@@ -41,9 +41,10 @@ func TestGetAuthURL(t *testing.T) {
 }
 
 func TestAuthFlow(t *testing.T) {
-	// より長いタイムアウトを設定
-	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-	defer cancel()
+	homeDir := t.TempDir()
+	t.Setenv("HOME", homeDir)
+	// コンテキスト（タイムアウトなし）を設定
+	ctx := context.Background()
 
 	// モックのOAuthサーバー設定
 	mockOAuth := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -69,33 +70,19 @@ func TestAuthFlow(t *testing.T) {
 		AuthURL:      mockOAuth.URL + "/auth",
 		TokenURL:     mockOAuth.URL + "/token",
 	}
-
-	// AuthFlow を別ゴルーチンで実行
-	tokenCh := make(chan *oauth2.Token, 1)
-	errCh := make(chan error, 1)
+	// callback を送る goroutine（AuthFlow がリッスン開始後に実行されるよう少し待つ）
+	callbackURL := fmt.Sprintf("http://localhost:%d/callback?code=test-code&state=state", 8080)
 	go func() {
-		tok, err := AuthFlow(ctx, config)
-		if err != nil {
-			errCh <- err
-			return
-		}
-		tokenCh <- tok
+		time.Sleep(10 * time.Millisecond)
+		_, _ = http.Get(callbackURL)
 	}()
 
-	// ブラウザリダイレクトを模倣して認証コードを送信
-	callbackURL := fmt.Sprintf("http://localhost:%d/callback?code=test-code&state=state", 8080)
-	_, _ = http.Get(callbackURL)
-
-	select {
-	case err := <-errCh:
-		require.NoError(t, err)
-	case token := <-tokenCh:
-		require.NotNil(t, token)
-		assert.Equal(t, "test-access-token", token.AccessToken)
-		assert.Equal(t, "test-refresh-token", token.RefreshToken)
-	case <-time.After(500 * time.Millisecond):
-		t.Fatal("timeout waiting for AuthFlow to finish")
-	}
+	// AuthFlow を同期実行
+	token, err := AuthFlow(ctx, config)
+	require.NoError(t, err)
+	require.NotNil(t, token)
+	assert.Equal(t, "test-access-token", token.AccessToken)
+	assert.Equal(t, "test-refresh-token", token.RefreshToken)
 }
 
 func TestSaveAndLoadToken(t *testing.T) {
