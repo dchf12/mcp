@@ -174,7 +174,6 @@ func (g *googleCalendarService) CreateEvent(ctx context.Context, calID string, e
 		return nil, errors.NewAPIError("create_event", errorMsg, 500, err)
 	}
 
-	loc := created.Location
 	return &domain.Event{
 		ID:          created.Id,
 		Title:       created.Summary,
@@ -189,7 +188,7 @@ func (g *googleCalendarService) CreateEvent(ctx context.Context, calID string, e
 			Date:     created.End.Date,
 			TimeZone: created.End.TimeZone,
 		},
-		Location:  &loc,
+		Location:  &created.Location,
 		Attendees: getEventAttendees(created.Attendees),
 	}, nil
 }

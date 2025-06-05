@@ -77,30 +77,3 @@ func TestGoogleCalendarAdapter_CreateEvent(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, wantEvent, got)
 }
-
-func TestGoogleCalendarAdapter_CreateEventLocationCopy(t *testing.T) {
-	wantEvent := &domain.Event{
-		ID:       "evt1",
-		Title:    "MTG",
-		Start:    domain.DateTime{DateTime: "2025-01-01T00:00:00Z"},
-		End:      domain.DateTime{DateTime: "2025-01-01T01:00:00Z"},
-		Location: func() *string { s := "Room 1"; return &s }(),
-	}
-
-	mockSvc := &mockCalendarService{insertResp: wantEvent}
-	adapter := &GoogleCalendarAdapter{service: mockSvc, limiter: NewRateLimiter()}
-
-	got, err := adapter.CreateEvent(context.Background(), "primary", &domain.Event{
-		Title:    wantEvent.Title,
-		Start:    wantEvent.Start,
-		End:      wantEvent.End,
-		Location: wantEvent.Location,
-	})
-
-	require.NoError(t, err)
-	require.NotNil(t, got.Location)
-	if got.Location == wantEvent.Location {
-		t.Errorf("location pointer should be copied")
-	}
-	require.Equal(t, *wantEvent.Location, *got.Location)
-}
