@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"os/exec"
 	"runtime"
+	"strconv"
 
 	"github.com/dch/mcp-google-calendar/internal/infrastructure/repository"
 	"github.com/dch/mcp-google-calendar/pkg/errors"
@@ -50,8 +52,17 @@ func AuthFlow(ctx context.Context, config *Config) (*oauth2.Token, error) {
 		slog.Info("ブラウザでURLを開けません。手動でアクセスしてください", "url", authURL)
 	}
 
+	// RedirectURLからポートを取得してローカルサーバーを起動
+	port := LocalServerPort
+	if u, err := url.Parse(config.RedirectURL); err == nil {
+		if p := u.Port(); p != "" {
+			if parsed, perr := strconv.Atoi(p); perr == nil {
+				port = parsed
+			}
+		}
+	}
 	// 認証コードを受け取るためのローカルサーバーを起動
-	code, err := startLocalServer(ctx)
+	code, err := startLocalServer(ctx, port)
 	if err != nil {
 		return nil, errors.NewOAuthError("authorization", "failed to get authorization code", err)
 	}
@@ -123,8 +134,7 @@ func LoadToken() (*oauth2.Token, error) {
 }
 
 // startLocalServer は認証コードを受け取るためのローカルサーバーを起動します
-func startLocalServer(ctx context.Context) (string, error) {
-	port := LocalServerPort
+func startLocalServer(ctx context.Context, port int) (string, error) {
 
 	codeChan := make(chan string)
 	errChan := make(chan error)
