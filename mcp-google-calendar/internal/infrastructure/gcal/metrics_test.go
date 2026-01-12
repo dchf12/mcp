@@ -23,6 +23,10 @@ func (d *dummyService) CreateEvent(ctx context.Context, calID string, ev *domain
 	return nil, errors.NewAPIError("create_event", "api_error_for_test", 400, nil)
 }
 
+func (d *dummyService) ListEvents(ctx context.Context, params domain.GetEventsParams) ([]domain.Event, error) {
+	return []domain.Event{}, nil
+}
+
 func TestMetrics(t *testing.T) {
 	ctx := context.Background()
 	adapter := NewWithService(&dummyService{})

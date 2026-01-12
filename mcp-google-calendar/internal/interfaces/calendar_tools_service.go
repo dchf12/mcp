@@ -47,10 +47,12 @@ func RegisterCalendarTools(ctx context.Context, s *server.MCPServer, conf *confi
 	// ユースケースを初期化
 	getCalendarsUC := usecase.NewGetCalendarsUseCase(adapter)
 	createEventUC := usecase.NewCreateEventUseCase(adapter)
+	getEventsUC := usecase.NewGetEventsUseCase(adapter)
 
 	// ツールを作成
 	listTool := NewListCalendarTool(getCalendarsUC)
 	createTool := NewCreateEventTool(createEventUC)
+	listEventsTool := NewListEventsTool(getEventsUC)
 
 	// ツールを登録
 	s.AddTool(listTool.GetDefinition(), func(toolCtx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -70,6 +72,16 @@ func RegisterCalendarTools(ctx context.Context, s *server.MCPServer, conf *confi
 			return nil, ctx.Err()
 		default:
 			return createTool.Execute(toolCtx, req)
+		}
+	})
+
+	s.AddTool(listEventsTool.GetDefinition(), func(toolCtx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		// 親コンテキストが終了したら実行をキャンセル
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		default:
+			return listEventsTool.Execute(toolCtx, req)
 		}
 	})
 

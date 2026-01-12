@@ -100,3 +100,28 @@ func (e *Event) validateDateTime() error {
 	}
 	return nil
 }
+
+// GetEventsParams はイベント一覧取得のパラメータを表す値オブジェクトです
+type GetEventsParams struct {
+	CalendarID string    // カレンダーID（必須）
+	TimeMin    time.Time // 開始日時（必須）
+	TimeMax    time.Time // 終了日時（必須）
+	MaxResults int       // 最大取得件数（オプション、デフォルト250）
+}
+
+// Validate はGetEventsParamsのバリデーションを行います
+func (p *GetEventsParams) Validate() error {
+	if p.CalendarID == "" {
+		return fmt.Errorf("calendar ID is required")
+	}
+	if p.TimeMin.IsZero() {
+		return fmt.Errorf("time_min is required")
+	}
+	if p.TimeMax.IsZero() {
+		return fmt.Errorf("time_max is required")
+	}
+	if p.TimeMax.Before(p.TimeMin) {
+		return fmt.Errorf("time_max cannot be before time_min")
+	}
+	return nil
+}

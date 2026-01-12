@@ -16,6 +16,7 @@ import (
 type CalendarService interface {
 	ListCalendars(ctx context.Context) ([]domain.Calendar, error)
 	CreateEvent(ctx context.Context, calID string, ev *domain.Event) (*domain.Event, error)
+	ListEvents(ctx context.Context, params domain.GetEventsParams) ([]domain.Event, error)
 }
 
 type GoogleCalendarAdapter struct {
@@ -86,6 +87,28 @@ func (a *GoogleCalendarAdapter) CreateEvent(ctx context.Context, calendarID stri
 	}
 
 	return ev, nil
+}
+
+func (a *GoogleCalendarAdapter) ListEvents(ctx context.Context, params domain.GetEventsParams) ([]domain.Event, error) {
+	start := time.Now()
+	operation := "list_events"
+	recordAPIRequest(operation)
+
+	if !a.limiter.Allow() {
+		recordRateLimitHit()
+		recordAPIError(operation, "rate_limit")
+		return nil, RateLimitExceededError
+	}
+
+	events, err := a.service.ListEvents(ctx, params)
+	recordAPIResponseDuration(operation, time.Since(start).Seconds())
+
+	if err != nil {
+		recordAPIError(operation, "api_error")
+		return nil, err
+	}
+
+	return events, nil
 }
 
 // googleCalendarService は google カレンダー API を直接呼び出し、
@@ -212,4 +235,57 @@ func (g *googleCalendarService) validateCalendarAccess(ctx context.Context, calI
 		return errors.NewAPIError("validate_calendar", fmt.Sprintf("failed to validate calendar access: %v", err), 500, err)
 	}
 	return nil
+}
+
+func (g *googleCalendarService) ListEvents(ctx context.Context, params domain.GetEventsParams) ([]domain.Event, error) {
+	if params.CalendarID == "" {
+		return nil, errors.NewValidationError("calendar_id", "calendar ID cannot be empty", nil)
+	}
+
+	// カレンダーIDの存在を事前チェック
+	if err := g.validateCalendarAccess(ctx, params.CalendarID); err != nil {
+		return nil, err
+	}
+
+	// Google Calendar API の Events.List を呼び出し
+	call := g.raw.Events.List(params.CalendarID).
+		Context(ctx).
+		TimeMin(params.TimeMin.Format(time.RFC3339)).
+		TimeMax(params.TimeMax.Format(time.RFC3339)).
+		SingleEvents(true).       // 繰り返しイベントを展開
+		OrderBy("startTime").     // 開始時刻でソート
+		MaxResults(int64(params.MaxResults))
+
+	list, err := call.Do()
+	if err != nil {
+		errorMsg := fmt.Sprintf("failed to list events from calendar '%s': %v", params.CalendarID, err)
+		if strings.Contains(err.Error(), "404") || strings.Contains(err.Error(), "notFound") {
+			errorMsg = fmt.Sprintf("calendar '%s' not found or access denied", params.CalendarID)
+		}
+		return nil, errors.NewAPIError("list_events", errorMsg, 500, err)
+	}
+
+	// Google Calendar API のレスポンスをドメインエンティティに変換
+	events := make([]domain.Event, len(list.Items))
+	for i, item := range list.Items {
+		events[i] = domain.Event{
+			ID:          item.Id,
+			Title:       item.Summary,
+			Description: item.Description,
+			Start: domain.DateTime{
+				DateTime: item.Start.DateTime,
+				Date:     item.Start.Date,
+				TimeZone: item.Start.TimeZone,
+			},
+			End: domain.DateTime{
+				DateTime: item.End.DateTime,
+				Date:     item.End.Date,
+				TimeZone: item.End.TimeZone,
+			},
+			Location:  &item.Location,
+			Attendees: getEventAttendees(item.Attendees),
+		}
+	}
+
+	return events, nil
 }

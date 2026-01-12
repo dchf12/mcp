@@ -10,10 +10,12 @@ import (
 )
 
 type mockCalendarService struct {
-	listResp   []domain.Calendar
-	insertResp *domain.Event
-	listErr    error
-	insertErr  error
+	listResp       []domain.Calendar
+	insertResp     *domain.Event
+	listEventsResp []domain.Event
+	listErr        error
+	insertErr      error
+	listEventsErr  error
 }
 
 func (m *mockCalendarService) ListCalendars(ctx context.Context) ([]domain.Calendar, error) {
@@ -21,6 +23,9 @@ func (m *mockCalendarService) ListCalendars(ctx context.Context) ([]domain.Calen
 }
 func (m *mockCalendarService) CreateEvent(ctx context.Context, calendarID string, ev *domain.Event) (*domain.Event, error) {
 	return m.insertResp, m.insertErr
+}
+func (m *mockCalendarService) ListEvents(ctx context.Context, params domain.GetEventsParams) ([]domain.Event, error) {
+	return m.listEventsResp, m.listEventsErr
 }
 
 var _ CalendarService = (*mockCalendarService)(nil)
